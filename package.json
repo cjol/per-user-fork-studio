@@ -1,0 +1,26 @@
+{
+  "name": "per-user-fork-studio",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "typegen": "wrangler types",
+    "check": "npm run typegen && tsc --noEmit"
+  },
+  "dependencies": {
+    "@ai-sdk/anthropic": "^3.0.91",
+    "@ai-sdk/openai": "^3.0.79",
+    "@cloudflare/shell": "^0.4.1",
+    "@cloudflare/think": "^0.10.0",
+    "@cloudflare/worker-bundler": "^0.2.1",
+    "agents": "^0.17.0",
+    "isomorphic-git": "^1.37.6",
+    "workers-ai-provider": "^3.2.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.10",
+    "typescript": "^5.9.2",
+    "wrangler": "^4.105.0"
+  }
+}

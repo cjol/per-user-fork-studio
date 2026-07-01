@@ -1,0 +1,20 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "fork-studio",
+  "main": "src/server.ts",
+  "compatibility_date": "2026-06-11",
+  "compatibility_flags": ["nodejs_compat"],
+  "artifacts": [
+    {
+      "binding": "ARTIFACTS",
+      "namespace": "default",
+      "remote": true
+    }
+  ],
+  "ai": { "binding": "AI" },
+  "durable_objects": {
+    "bindings": [{ "name": "USERAPP", "class_name": "UserApp" }]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["UserApp"] }],
+  "worker_loaders": [{ "binding": "LOADER" }]
+}
