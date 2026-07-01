@@ -24,57 +24,19 @@ import { createWorkersAI } from "workers-ai-provider";
 import { openai } from "workers-ai-provider/openai";
 import { BASE_FILES } from "./base-app";
 import { appOverlay } from "./overlay";
-
-const BASE_REPO = "fork-studio-base";
-const BASE_USER = "__base__";
-// Selectable per edit via the panel toggle.
-const FAST_MODEL = "@cf/zai-org/glm-4.7-flash";
-// Capable model: OpenAI via AI Gateway Unified Billing (env.AI slug delegate).
-// To switch later, change only this constant; the UI stays generic.
-const CAPABLE_MODEL = "openai/gpt-5.4";
-// const CAPABLE_MODEL = "openai/gpt-5.5"; // higher capability/cost (revert)
-// const CAPABLE_MODEL = "openai/gpt-4.1"; // cheaper OpenAI (revert)
-// const CAPABLE_MODEL = "@cf/moonshotai/kimi-k2.7-code"; // Workers AI Kimi (revert)
-type ModelChoice = "fast" | "capable";
-const secret = (token: string) => token.split("?")[0];
-const author = { name: "Fork Studio", email: "studio@example.com" };
-
-function repoNameFor(user: string): string {
-  const slug = user
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 24);
-  return `fork-studio-user-${slug || "anon"}`;
-}
-
-const AGENT_SYSTEM =
-  "You are an expert Cloudflare Workers engineer editing a SINGLE file: " +
-  "/repo/src/index.ts. It exports `class App extends DurableObject` (from " +
-  "cloudflare:workers). Its async fetch() server-renders an HTML dashboard " +
-  "(see the page() helper: plain HTML string + inline vanilla JS in CLIENT_JS) " +
-  "and a JSON API persisted in this.ctx.storage (KV-style get/put). Use the " +
-  "file tools (read, edit) and make the SMALLEST edits. Rules: keep " +
-  "`export class App extends DurableObject` with an async fetch(request); the " +
-  "UI is plain HTML + inline JS — do NOT add React or any npm dependency or a " +
-  "build step; persist data via this.ctx.storage; don't link to other pages " +
-  "(the host provides app chrome).";
-
-interface LogEntry {
-  oid: string;
-  short: string;
-  message: string;
-}
-interface AppState {
-  user: string;
-  repo: string;
-  loggedIn: boolean;
-  pushedToFork: boolean;
-  log: LogEntry[];
-  baseAhead: boolean;
-  error?: string;
-  note?: string;
-}
+import { handleRequest } from "./router";
+import {
+  AGENT_SYSTEM,
+  BASE_REPO,
+  BASE_USER,
+  CAPABLE_MODEL,
+  FAST_MODEL,
+  author,
+  repoNameFor,
+  secret,
+  type ModelChoice
+} from "./config";
+import type { AppState, LogEntry } from "./types";
 
 export class UserApp extends Think<Env> {
   // The per-user git working tree is the agent's mounted Workspace, so Think's
@@ -828,112 +790,6 @@ export class UserApp extends Think<Env> {
   }
 }
 
-// ── Top-level router ──────────────────────────────────────────────────
-function getCookie(request: Request, name: string): string | null {
-  const header = request.headers.get("Cookie") ?? "";
-  for (const part of header.split(";")) {
-    const [k, ...v] = part.trim().split("=");
-    if (k === name) return decodeURIComponent(v.join("="));
-  }
-  return null;
-}
-
 export default {
-  async fetch(request: Request, env: Env): Promise<Response> {
-    const url = new URL(request.url);
-    const user = getCookie(request, "user");
-
-    if (url.pathname === "/login" && request.method === "POST") {
-      const form = await request.formData();
-      const name = String(form.get("name") ?? "").trim().slice(0, 40);
-      if (!name) return new Response(null, { status: 302, headers: { Location: "/" } });
-      return new Response(null, {
-        status: 302,
-        headers: {
-          Location: "/",
-          "Set-Cookie": `user=${encodeURIComponent(name)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=86400`
-        }
-      });
-    }
-    if (url.pathname === "/logout") {
-      return new Response(null, {
-        status: 302,
-        headers: { Location: "/", "Set-Cookie": "user=; Path=/; Max-Age=0" }
-      });
-    }
-
-    // admin: blast all forks + reset base to a single commit (DOs self-heal)
-    if (url.pathname === "/admin/reset" && request.method === "POST") {
-      if (user !== "admin") return new Response("Forbidden", { status: 403 });
-      let cursor: string | undefined;
-      let deleted = 0;
-      do {
-        const page = (await env.ARTIFACTS.list(
-          cursor ? { cursor } : {}
-        )) as { repos?: Array<{ name: string }>; cursor?: string } | Array<{ name: string }>;
-        const repos = Array.isArray(page) ? page : (page.repos ?? []);
-        for (const r of repos) {
-          // delete user forks; keep the base repo (reset it via force-push)
-          if (/^fork-studio-user-/.test(r.name)) {
-            await env.ARTIFACTS.delete(r.name);
-            deleted++;
-          }
-        }
-        cursor = Array.isArray(page) ? undefined : page.cursor;
-      } while (cursor);
-      const base = await getAgentByName(env.USERAPP, BASE_USER);
-      await base.resetBase();
-      const wipedForks = await base.resetForkDOs();
-      return Response.json({ ok: true, deletedForks: deleted, wipedForks });
-    }
-
-    if (
-      url.pathname === "/api/state" ||
-      url.pathname === "/api/agent" ||
-      url.pathname === "/api/revert" ||
-      url.pathname === "/api/merge" ||
-      url.pathname === "/api/diag"
-    ) {
-      if (!user) return new Response("Login required", { status: 401 });
-      // `admin` edits the base app itself (the base DO); everyone else their fork
-      const target = user === "admin" ? BASE_USER : user;
-      const agent = await getAgentByName(env.USERAPP, target);
-      if (url.pathname === "/api/state") return Response.json(await agent.appState());
-      if (url.pathname === "/api/merge") return Response.json(await agent.mergeBase());
-      const body = (await request.json().catch(() => ({}))) as {
-        prompt?: string;
-        oid?: string;
-      };
-      if (url.pathname === "/api/agent") {
-        const model: ModelChoice =
-          (body as { model?: string }).model === "fast" ? "fast" : "capable";
-        const stream = await agent.streamAgentEdit(String(body.prompt ?? ""), model);
-        return new Response(stream, {
-          headers: {
-            "content-type": "text/event-stream",
-            "cache-control": "no-cache",
-            "x-accel-buffering": "no"
-          }
-        });
-      }
-      return Response.json(await agent.revertCommit(String(body.oid ?? "")));
-    }
-
-    // everything else == the app. admin + anonymous -> base DO; users -> fork.
-    const isAdmin = user === "admin";
-    const target = user && !isAdmin ? user : BASE_USER;
-    const agent = await getAgentByName(env.USERAPP, target);
-    const appBody =
-      request.method === "GET" || request.method === "HEAD"
-        ? undefined
-        : await request.arrayBuffer();
-    try {
-      return await agent.serve(url.toString(), request.method, isAdmin, appBody);
-    } catch (err) {
-      return new Response(
-        "serve error: " + String(err) + "\n" + ((err as Error)?.stack ?? ""),
-        { status: 500 }
-      );
-    }
-  }
+  fetch: handleRequest
 };
