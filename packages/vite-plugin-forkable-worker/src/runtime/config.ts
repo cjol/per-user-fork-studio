@@ -51,16 +51,46 @@ export function repoNameFor(cfg: ResolvedForkableConfig, user: string): string {
   return `${cfg.repoPrefix}${slug || "anon"}`;
 }
 
+/** Does the seed's package.json declare runtime dependencies? */
+function seedHasDependencies(files: Record<string, string>): boolean {
+  try {
+    const pkg = JSON.parse(files["package.json"] ?? "{}") as {
+      dependencies?: Record<string, string>;
+    };
+    return Object.keys(pkg.dependencies ?? {}).length > 0;
+  } catch {
+    return false;
+  }
+}
+
 function defaultSystemPrompt(manifest: ForkableAppManifest): string {
   const cls = manifest.appClassName;
+  const build = manifest.build ?? {};
+  const allowDeps = build.allowDependencies ?? seedHasDependencies(manifest.files);
   let prompt =
     "You are an expert Cloudflare Workers engineer editing a user's personal " +
     "fork of a small app. The app's files live under /repo. The server entry " +
     `is /repo/${manifest.entry} and it MUST keep ` +
     `\`export class ${cls} extends DurableObject\` (from "cloudflare:workers") ` +
     "with an async fetch(request) method. Use the file tools (read, edit) and " +
-    "make the SMALLEST edits that satisfy the request. Rules: do NOT add npm " +
-    "dependencies or a build step; persist data via this.ctx.storage; never " +
+    "make the SMALLEST edits that satisfy the request.";
+  if (build.client) {
+    const clients = Array.isArray(build.client) ? build.client : [build.client];
+    const served = clients.map(
+      (c) => `/repo/${c} (served at /${c.replace(/^src\//, "").replace(/\.(tsx?|jsx?)$/, ".js")})`
+    );
+    prompt +=
+      ` Browser code is bundled from ${served.join(", ")}; files under ` +
+      `/repo/${build.assetsDir ?? "public"}/ are served as static assets.`;
+  }
+  prompt += " Rules: ";
+  prompt += allowDeps
+    ? "npm dependencies declared in package.json are installed at build " +
+      "time — you may add a package there when strictly needed, but prefer " +
+      "the existing stack (installs slow the app's rebuild); "
+    : "do NOT add npm dependencies or a build step; ";
+  prompt +=
+    "persist data via this.ctx.storage; never " +
     `remove the ${cls} export; the host application provides outer chrome, so ` +
     "don't add links to other pages.";
   if (manifest.agentInstructions) {
@@ -93,7 +123,7 @@ export function resolveConfig(
     systemPrompt: manifest.systemPrompt ?? defaultSystemPrompt(manifest),
     author: { name: "Forkable Worker", email: `${name}@forkable.invalid` },
     auth: overrides.auth ?? cookieAuth(),
-    bundler: overrides.bundler ?? workerBundler()
+    bundler: overrides.bundler ?? workerBundler(manifest.build)
   };
 }
 

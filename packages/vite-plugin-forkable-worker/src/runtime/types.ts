@@ -23,7 +23,11 @@ export type ModelChoice = "fast" | "capable";
 export interface AuthSession {
   /** Stable identifier for this visitor (fork + repo names derive from it). */
   user: string;
-  /** Admins edit the base app itself instead of a personal fork. */
+  /**
+   * Operator bit: gates the destructive `/admin/reset` endpoint only. Base
+   * app *content* updates ship by deploying new seed files — there is no
+   * in-app base-editing path.
+   */
   isAdmin: boolean;
 }
 
@@ -91,10 +95,5 @@ export interface UserAppStub {
   resetForkDOs(): Promise<number>;
   resetSelf(): Promise<void>;
   resetBase(): Promise<void>;
-  serve(
-    reqUrl: string,
-    method: string,
-    asAdmin?: boolean,
-    body?: ArrayBuffer
-  ): Promise<Response>;
+  serve(reqUrl: string, method: string, body?: ArrayBuffer): Promise<Response>;
 }

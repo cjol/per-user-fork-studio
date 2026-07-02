@@ -44,4 +44,8 @@ export type {
   ModelChoice,
   UserAppStub
 } from "./types.js";
-export type { BindingNames, ForkableAppManifest } from "../shared/manifest.js";
+export type {
+  BindingNames,
+  BuildOptions,
+  ForkableAppManifest
+} from "../shared/manifest.js";

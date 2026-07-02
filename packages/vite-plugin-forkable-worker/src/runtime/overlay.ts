@@ -1,14 +1,6 @@
 // The host-injected fork/customization panel. Appended to every HTML response
 // the fork's app produces, so the app itself never has to know it is forkable.
 
-const ADMIN_BANNER = `<style>
-body{padding-top:46px!important}
-#admin-banner{position:fixed;top:0;left:0;right:0;height:46px;background:#b91c1c;color:#fff;
-display:flex;align-items:center;justify-content:center;text-align:center;padding:0 12px;
-font:600 14px system-ui,sans-serif;z-index:2147483600;box-shadow:0 2px 8px rgba(0,0,0,.4)}
-@media(max-width:480px){body{padding-top:58px!important}#admin-banner{height:58px;font-size:12px;line-height:1.25}}
-</style><div id="admin-banner">⚠ ADMIN — editing the BASE app. Changes affect ALL users.</div>`;
-
 const OVERLAY_STYLE = `<style>
 #fork-fab{position:fixed;right:16px;bottom:16px;width:54px;height:54px;border-radius:50%;
 border:0;background:#f6821f;color:#111;cursor:pointer;box-shadow:0 6px 20px rgba(0,0,0,.4);
@@ -44,8 +36,7 @@ const OVERLAY_SCRIPT = `<script>
   var F = window.__FORK || { loggedIn:false };
   var fab=document.createElement('button');
   fab.id='fork-fab';
-  fab.title = F.admin ? 'Edit the base app' : (F.loggedIn ? 'Customize your fork' : 'Fork this app');
-  if(F.admin){ fab.style.background='#b91c1c'; fab.style.color='#fff'; }
+  fab.title = F.loggedIn ? 'Customize your fork' : 'Fork this app';
   fab.innerHTML='<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="6" r="2.2"/><circle cx="18" cy="6" r="2.2"/><circle cx="12" cy="19" r="2.2"/><path d="M6 8.2v1.3a3 3 0 0 0 3 3h6a3 3 0 0 0 3-3V8.2"/><path d="M12 12.8v4"/></svg>';
   var panel=document.createElement('div');
   panel.id='fork-panel'; panel.style.display='none';
@@ -69,22 +60,6 @@ const OVERLAY_SCRIPT = `<script>
     paintToggle();
   }
   function render(){
-    if(F.admin){
-      panel.innerHTML='<h3>Edit the BASE app</h3><p class="muted">Your changes update the root app for everyone. Existing forks will see “Pull base updates”.</p>'
-        +toggleHtml
-        +'<textarea id="fp-prompt" placeholder="Describe a base change… e.g. add a footer with a help link to every dashboard"></textarea>'
-        +'<button class="act" id="fp-gen" style="background:#b91c1c;color:#fff">Generate base update</button>'
-        +'<div id="fp-status" class="muted" style="margin-top:8px"></div>'
-        +'<h4>Base history</h4><div id="fp-log" class="muted">Loading…</div>'
-        +'<button class="act" id="fp-reset" style="margin-top:14px;background:#3a0d0d;color:#ff9a9a;border:1px solid #5b1a1a">Reset ALL state</button>'
-        +'<div style="margin-top:10px;text-align:right">'
-        +'<a href="/logout" style="color:#9a9aa6;font-size:12px;text-decoration:none">Exit admin ↪</a></div>';
-      document.getElementById('fp-gen').onclick=generate;
-      document.getElementById('fp-reset').onclick=resetAll;
-      wireToggle();
-      loadLog();
-      return;
-    }
     if(!F.loggedIn){
       panel.innerHTML = F.loginHtml || '<h3>Fork this app</h3><p class="muted">Sign in to get your own copy.</p>';
       return;
@@ -102,14 +77,6 @@ const OVERLAY_SCRIPT = `<script>
     document.getElementById('fp-merge').onclick=merge;
     wireToggle();
     loadLog();
-  }
-  function resetAll(){
-    if(!confirm('Delete ALL forks and reset the base to a single commit?')) return;
-    setStatus('Resetting everything…');
-    fetch('/admin/reset',{method:'POST'}).then(function(r){return r.json();}).then(function(s){
-      if(s.error){ setStatus(s.error,true); }
-      else { setStatus('Reset — deleted '+s.deletedForks+' fork repos, wiped '+s.wipedForks+' fork sessions, base reset. Reloading…'); setTimeout(function(){ location.reload(); },900); }
-    }).catch(function(e){ setStatus(String(e),true); });
   }
   function merge(){
     setStatus('Pulling base updates…'); document.getElementById('fp-merge').disabled=true;
@@ -177,7 +144,6 @@ const OVERLAY_SCRIPT = `<script>
 </script>`;
 
 export function appOverlay(options: {
-  asAdmin: boolean;
   loggedIn: boolean;
   user: string;
   /** Sign-in panel markup from the auth provider (anonymous visitors). */
@@ -185,11 +151,9 @@ export function appOverlay(options: {
 }): string {
   const flag = JSON.stringify({
     loggedIn: options.loggedIn,
-    admin: options.asAdmin,
     user: options.user,
     loginHtml: options.loginPanelHtml ?? ""
     // escape "<" so markup (e.g. "</script>") can't break out of the tag
   }).replace(/</g, "\\u003c");
-  const banner = options.asAdmin ? ADMIN_BANNER : "";
-  return banner + `<script>window.__FORK=${flag};</script>` + OVERLAY_STYLE + OVERLAY_SCRIPT;
+  return `<script>window.__FORK=${flag};</script>` + OVERLAY_STYLE + OVERLAY_SCRIPT;
 }

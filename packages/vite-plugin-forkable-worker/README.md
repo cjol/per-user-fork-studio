@@ -82,11 +82,18 @@ At runtime, the harness:
   clones it into the agent's Workspace, and serves the built app through the
   Worker Loader (the app's `App` DO is mounted as a facet, so its storage
   survives rebuilds)
-- injects a floating fork/customize panel into the app's HTML
+- injects a floating fork/customize panel into the app's HTML (server-rendered
+  or static)
 - runs a Think agent over the fork's files for natural-language edits, then
   rebuilds, commits, and pushes
 - lets forks pull base updates by git merge, falling back to the agent when
   the merge conflicts
+
+**Deploying is publishing.** The plugin embeds a content hash of the seed
+files; when a deploy ships a different hash, the base Durable Object commits
+the changed files onto the base repo (on its next visit) and every fork's
+panel shows "Pull base updates". There is no in-app "admin edits the base"
+path — the developer's normal deploy loop is the upstream.
 
 ## The forkable app contract
 
@@ -96,7 +103,8 @@ a Durable Object* on every edit, so the app must fit that runtime:
 - the entry file exports a Durable Object class (default `App`) with an
   `async fetch(request)`
 - persistence goes through `this.ctx.storage`
-- **no npm dependencies** (see "Bundling" below) and no build step
+- npm dependencies and client bundles are supported (see "Bundling" below),
+  but rebuilds pay for them inside the DO isolate — keep the stack lean
 - the host owns the outer chrome (login, fork panel); the app renders itself
 
 ## Extension points
@@ -104,9 +112,8 @@ a Durable Object* on every edit, so the app must fit that runtime:
 ### Auth (`AuthProvider`)
 
 The default is the prototype's honor-system cookie login (`cookieAuth()`):
-visitors pick a name; the name `admin` edits the base app. **Do not ship that
-to real users** — nothing stops anyone from claiming any name, including the
-admin's. Swap it out by pointing the plugin at a module:
+visitors pick a name. **Do not ship that to real users** — nothing stops
+anyone from claiming any name. Swap it out by pointing the plugin at a module:
 
 ```ts
 forkableWorker({ auth: "./src/access-auth.ts" })
@@ -130,13 +137,33 @@ export default provider;
 plus an `isAdmin` bit; optional `handleRequest` owns login/logout/callback
 routes, and optional `loginPanelHtml` renders the sign-in UI in the overlay.
 
+`isAdmin` no longer grants a base-editing UI — base updates ship via deploys.
+It only gates `POST /admin/reset`, an operator endpoint (no UI) that deletes
+all fork repos and force-resets the base repo to the current seed.
+
 ### Bundling (`AppBundler`)
 
 The default (`workerBundler()`) wraps `@cloudflare/worker-bundler`'s
-dependency-free fast transform — that's what keeps per-fork rebuilds cheap in
-a DO isolate, and why the agent is told not to add dependencies. To lift that
-(e.g. esbuild-wasm plus a module cache for a curated dependency set),
-implement the interface and point the plugin at it:
+`createApp`, which does more than the prototype used: **npm dependencies**
+declared in the fork's `package.json` are fetched from the registry and
+bundled with esbuild, **JSX/React** is supported (`jsx: "automatic"`), client
+entries are bundled for the browser, and files under `public/` are served as
+static assets. Configure it through the plugin's `build` option:
+
+```ts
+forkableWorker({
+  appDir: "app",
+  entry: "src/index.ts",
+  build: { client: "src/client.tsx", jsx: "automatic", jsxImportSource: "react" }
+})
+```
+
+The trade-off is where the work happens: installs and bundling run inside the
+host Durable Object isolate on every cold rebuild (memory + latency). Two
+small packages are fine; for heavier stacks implement a custom `AppBundler` —
+e.g. persist installed packages with worker-bundler's
+`DurableObjectKVFileSystem` so dependencies are fetched once rather than per
+rebuild — and point the plugin at it:
 
 ```ts
 forkableWorker({ bundler: "./src/deps-bundler.ts" })
@@ -165,7 +192,8 @@ Both can also be passed as code when writing the host entry by hand:
 | `name` | package.json name | prefixes Artifacts repos (`<name>-base`, `<name>-user-*`) |
 | `appClassName` | `"App"` | DO class the entry exports |
 | `auth` | built-in cookie auth | module default-exporting an `AuthProvider` |
-| `bundler` | worker-bundler transform | module default-exporting an `AppBundler` |
+| `bundler` | worker-bundler wrapper | module default-exporting an `AppBundler` |
+| `build` | — | default bundler settings: `client` entries, `jsx`, `jsxImportSource`, `assetsDir`, `allowDependencies` |
 | `agentInstructionsFile` | `"AGENT.md"` | appended to the agent system prompt when present |
 | `systemPrompt` | built-in | full replacement for the agent system prompt |
 | `models` | glm-4.7-flash / gpt-5.4 | overlay's fast/capable model slugs |
@@ -178,11 +206,14 @@ For editor support of the virtual module, add
 
 ## Current limitations / roadmap
 
-- **Seed updates on redeploy**: the base repo is seeded once; after that the
-  admin panel edits it. The plugin already embeds a `seedVersion` content hash
-  and the base DO stores it, so the next step is committing changed seed files
-  to the base repo on deploy — making the developer's normal deploy the
-  "upstream update" users pull.
+- **Seed updates apply lazily**: the base DO commits a deploy's seed changes
+  when it next wakes (first visit after the deploy), not at deploy time.
+- **Seed updates overwrite**: the deploy commit replaces seed-managed files
+  wholesale on the base branch. Forks still merge it like any upstream commit
+  (with AI conflict rescue), but don't hand-edit the base repo out of band.
+- **Dependency installs are per-rebuild**: the default bundler re-fetches npm
+  packages on cold rebuilds. A `DurableObjectKVFileSystem`-backed bundler
+  would persist them (see Bundling above).
 - **Quotas/cleanup**: every visitor costs an Artifacts repo, a DO, and AI
   spend. There is no eviction or rate limiting yet.
 - **Fork isolation**: dynamically loaded fork code gets no bindings (only its

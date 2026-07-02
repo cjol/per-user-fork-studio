@@ -2,7 +2,11 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import * as crypto from "node:crypto";
 import type { Plugin, ViteDevServer } from "vite";
-import type { BindingNames, ForkableAppManifest } from "../shared/manifest.js";
+import type {
+  BindingNames,
+  BuildOptions,
+  ForkableAppManifest
+} from "../shared/manifest.js";
 
 export interface ForkableWorkerPluginOptions {
   /** Directory whose files seed every user's fork. Default "app". */
@@ -20,9 +24,14 @@ export interface ForkableWorkerPluginOptions {
   auth?: string;
   /**
    * Module whose default export is an `AppBundler`. Default: the built-in
-   * dependency-free worker-bundler transform.
+   * worker-bundler wrapper configured by `build`.
    */
   bundler?: string;
+  /**
+   * Build settings for fork rebuilds: client entries, JSX mode, static asset
+   * directory, npm dependency policy. Applies to the default bundler.
+   */
+  build?: BuildOptions;
   /**
    * File inside appDir whose contents are appended to the agent system
    * prompt. Default "AGENT.md" (used only when present).
@@ -91,6 +100,18 @@ export function forkableWorker(options: ForkableWorkerPluginOptions = {}): Plugi
           `exported Durable Object class; the app will fail to load without it.`
       );
     }
+    const clients = options.build?.client
+      ? Array.isArray(options.build.client)
+        ? options.build.client
+        : [options.build.client]
+      : [];
+    for (const client of clients) {
+      if (!(client in files)) {
+        throw new Error(
+          `[forkable-worker] client entry "${client}" not found in ${dir}.`
+        );
+      }
+    }
     const agentInstructions = files[agentInstructionsFile];
     return {
       name: projectName(),
@@ -98,6 +119,7 @@ export function forkableWorker(options: ForkableWorkerPluginOptions = {}): Plugi
       entry,
       appClassName,
       seedVersion: hashFiles(files),
+      build: options.build,
       agentInstructions,
       systemPrompt: options.systemPrompt,
       models: options.models,

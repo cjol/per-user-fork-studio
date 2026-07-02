@@ -3,7 +3,7 @@ import type { AuthProvider } from "./types.js";
 export interface CookieAuthOptions {
   /** Cookie holding the visitor's name. Default "user". */
   cookieName?: string;
-  /** Name that gets admin (base-app-editing) rights. Default "admin". */
+  /** Name allowed to call the /admin/reset operator endpoint. Default "admin". */
   adminUser?: string;
   /** Cookie lifetime in seconds. Default 86400 (one day). */
   maxAge?: number;

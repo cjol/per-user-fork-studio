@@ -10,6 +10,17 @@ forkable host worker around them, with pluggable auth and bundling:
 
 - [`packages/vite-plugin-forkable-worker`](packages/vite-plugin-forkable-worker) — harness runtime + Vite plugin
 - [`examples/todo`](examples/todo) — this prototype's base app, consuming the plugin
+- [`examples/react-notes`](examples/react-notes) — a React base app with real
+  npm dependencies, exercising worker-bundler's esbuild path
+
+A CI deploy workflow for the examples lives at
+[`.github/deploy-examples.workflow.yml`](.github/deploy-examples.workflow.yml)
+— activate it with
+`git mv .github/deploy-examples.workflow.yml .github/workflows/deploy-examples.yml`
+(it couldn't be pushed into `workflows/` directly: the automation token lacks
+the `workflows` permission) and add the `CLOUDFLARE_API_TOKEN` +
+`CLOUDFLARE_ACCOUNT_ID` repository secrets. A deploy that changes an
+example's `app/` files is the upstream update forks pull.
 
 The prototype below remains a self-contained reference (it does not use the
 package).

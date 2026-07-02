@@ -10,6 +10,27 @@ export interface BindingNames {
   loader: string;
 }
 
+/** How each fork's files are built (passed to the default worker-bundler). */
+export interface BuildOptions {
+  /**
+   * Client entry point(s) bundled for the browser. `src/client.tsx` is served
+   * at `/client.js` (the bundler strips `src/` and rewrites the extension).
+   */
+  client?: string | string[];
+  /** JSX mode (e.g. "automatic" to skip explicit React imports). */
+  jsx?: "transform" | "preserve" | "automatic";
+  /** JSX runtime import source (e.g. "react", "preact"). */
+  jsxImportSource?: string;
+  /** Seed directory served as static assets. Default "public". */
+  assetsDir?: string;
+  /**
+   * Whether the edit agent may manage npm dependencies in package.json
+   * (worker-bundler installs them at build time). Default: true when the
+   * seed package.json declares dependencies, else false.
+   */
+  allowDependencies?: boolean;
+}
+
 /**
  * Everything the Vite plugin embeds into the host worker. This is the payload
  * of the `virtual:forkable-worker/app` module and the input to
@@ -30,6 +51,8 @@ export interface ForkableAppManifest {
    * updates to the base repo on deploy (so forks see "Pull base updates").
    */
   seedVersion: string;
+  /** Build settings for fork rebuilds (client bundling, JSX, dependencies). */
+  build?: BuildOptions;
   /** Extra guidance appended to the built-in agent system prompt (AGENT.md). */
   agentInstructions?: string;
   /** Full replacement for the built-in agent system prompt. */

@@ -151,8 +151,48 @@ export function createUserAppClass(cfg: ResolvedForkableConfig): UserAppClass {
         username: "x",
         password: writeToken
       });
-      // Remember which seed built this base. Not consulted yet — the hook for
-      // committing developer updates on redeploy when the seed hash changes.
+      await this.ctx.storage.put("seedVersion", cfg.seedVersion);
+    }
+
+    // Deploy-as-upstream-update: when a redeploy ships different seed files
+    // (the plugin embeds a content hash), commit them onto the base repo's
+    // main so every fork sees "Pull base updates". Runs only on the base DO,
+    // whose working tree is a clone of the base repo.
+    private async maybeApplySeedUpdate(): Promise<void> {
+      const applied = await this.ctx.storage.get<string>("seedVersion");
+      if (applied === cfg.seedVersion) return;
+      const current = await this.readFiles();
+      const git = this.git();
+      let changed = false;
+      for (const [path, content] of Object.entries(cfg.files)) {
+        if (current[path] !== content) {
+          await this.workspace.writeFile(`/repo/${path}`, content);
+          changed = true;
+        }
+      }
+      for (const path of Object.keys(current)) {
+        if (path in cfg.files) continue;
+        try {
+          await this.workspace.rm(`/repo/${path}`);
+          await git.rm({ filepath: path });
+          changed = true;
+        } catch {
+          /* leave stragglers in place */
+        }
+      }
+      if (changed) {
+        await git.add({ filepath: "." });
+        await git.commit({
+          message: `Deploy base app update (seed ${cfg.seedVersion})`,
+          author: cfg.author
+        });
+        const pushed = await this.pushOrigin();
+        if (!pushed) {
+          console.warn(
+            "[forkable-worker] seed update committed locally but push to the base repo failed"
+          );
+        }
+      }
       await this.ctx.storage.put("seedVersion", cfg.seedVersion);
     }
 
@@ -331,6 +371,7 @@ export function createUserAppClass(cfg: ResolvedForkableConfig): UserAppClass {
             }
           }
           if (!forked) await this.bootstrap();
+          if (this.isBase) await this.maybeApplySeedUpdate();
           await this.rebuild(await this.readFiles());
         })();
         // clear the latch if setup fails, so a later request can retry cleanly
@@ -699,10 +740,9 @@ export function createUserAppClass(cfg: ResolvedForkableConfig): UserAppClass {
       }
     }
 
-    private overlay(asAdmin: boolean): string {
+    private overlay(): string {
       return appOverlay({
-        asAdmin,
-        loggedIn: asAdmin ? true : !this.isBase,
+        loggedIn: !this.isBase,
         user: this.name,
         loginPanelHtml: cfg.auth.loginPanelHtml?.()
       });
@@ -742,12 +782,7 @@ export function createUserAppClass(cfg: ResolvedForkableConfig): UserAppClass {
       }));
     }
 
-    async serve(
-      reqUrl: string,
-      method: string,
-      asAdmin = false,
-      body?: ArrayBuffer
-    ): Promise<Response> {
+    async serve(reqUrl: string, method: string, body?: ArrayBuffer): Promise<Response> {
       await this.ensureReady();
       if (!this.build) await this.rebuild(await this.readFiles());
       const built = this.build!;
@@ -756,17 +791,18 @@ export function createUserAppClass(cfg: ResolvedForkableConfig): UserAppClass {
         body: body && body.byteLength > 0 ? body : undefined
       });
 
-      const assetRes = await built.serveAsset(request);
-      if (assetRes) return assetRes;
+      // Static assets first (client bundles, public/ files); everything else
+      // hits the app's exported DO class, mounted as a per-fork facet: a
+      // dynamic DO with its own persistent storage.
+      const resp =
+        (await built.serveAsset(request)) ??
+        (await this.appFacet(built).fetch(request));
 
-      // Mount the app's exported DO class as a per-fork facet: a dynamic DO
-      // with its own persistent storage. Forwarded requests hit it.
-      const resp = await this.appFacet(built).fetch(request);
-
+      // Inject the fork panel into any HTML — server-rendered or static asset.
       const ct = resp.headers.get("content-type") ?? "";
       if (!ct.includes("text/html")) return resp;
       let html = await resp.text();
-      const inject = this.overlay(asAdmin);
+      const inject = this.overlay();
       html = html.includes("</body>")
         ? html.replace("</body>", inject + "</body>")
         : html + inject;

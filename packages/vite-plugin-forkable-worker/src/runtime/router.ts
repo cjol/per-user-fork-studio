@@ -14,7 +14,9 @@ export async function handleRequest(
   const session = await cfg.auth.identify(request, env);
   const url = new URL(request.url);
 
-  // admin: delete all fork repos + reset base to a single commit (DOs self-heal)
+  // operator hatch: delete all fork repos + reset base to a single fresh seed
+  // commit (DOs self-heal). No UI — call it directly. Base app *content*
+  // updates ship by deploying new seed files, not through an admin edit path.
   if (url.pathname === "/admin/reset" && request.method === "POST") {
     if (!session?.isAdmin) return new Response("Forbidden", { status: 403 });
     const artifacts = bindings(env, cfg).artifacts;
@@ -47,9 +49,7 @@ export async function handleRequest(
     url.pathname === "/api/merge"
   ) {
     if (!session) return new Response("Login required", { status: 401 });
-    // admins edit the base app itself (the base DO); everyone else their fork
-    const target = session.isAdmin ? cfg.baseUser : session.user;
-    const agent = await userAppByName(env, cfg, target);
+    const agent = await userAppByName(env, cfg, session.user);
     if (url.pathname === "/api/state") return Response.json(await agent.appState());
     if (url.pathname === "/api/merge") return Response.json(await agent.mergeBase());
     const body = (await request.json().catch(() => ({}))) as {
@@ -71,16 +71,15 @@ export async function handleRequest(
     return Response.json(await agent.revertCommit(String(body.oid ?? "")));
   }
 
-  // everything else == the app. admin + anonymous -> base DO; users -> fork.
-  const isAdmin = session?.isAdmin ?? false;
-  const target = session && !isAdmin ? session.user : cfg.baseUser;
+  // everything else == the app. anonymous -> base DO; logged in -> your fork.
+  const target = session ? session.user : cfg.baseUser;
   const agent = await userAppByName(env, cfg, target);
   const appBody =
     request.method === "GET" || request.method === "HEAD"
       ? undefined
       : await request.arrayBuffer();
   try {
-    return await agent.serve(url.toString(), request.method, isAdmin, appBody);
+    return await agent.serve(url.toString(), request.method, appBody);
   } catch (err) {
     return new Response(
       "serve error: " + String(err) + "\n" + ((err as Error)?.stack ?? ""),

@@ -1,11 +1,11 @@
 {
-  "name": "example-todo-forkable",
+  "name": "example-react-notes-forkable",
   "private": true,
   "type": "module",
   "scripts": {
     "dev": "vite dev",
     "build": "vite build",
-    "deploy": "vite build && wrangler deploy -c dist/todo_forkable/wrangler.json"
+    "deploy": "vite build && wrangler deploy -c dist/react_notes_forkable/wrangler.json"
   },
   "dependencies": {
     "vite-plugin-forkable-worker": "*"
