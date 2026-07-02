@@ -2,6 +2,7 @@
   "name": "per-user-fork-studio",
   "private": true,
   "type": "module",
+  "workspaces": ["packages/*", "examples/*"],
   "scripts": {
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
