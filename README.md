@@ -2,6 +2,8 @@
 
 An educational Cloudflare Workers prototype that gives each visitor a personal fork of a base app. Users describe changes in natural language, a Think agent edits the fork's files, and the Worker rebuilds and serves the updated app.
 
+Preview isolation validation branch.
+
 ## Productized version
 
 The prototype's harness is extracted into a reusable package with a Vite
