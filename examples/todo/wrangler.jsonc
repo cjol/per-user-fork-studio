@@ -8,7 +8,7 @@
   "artifacts": [
     {
       "binding": "ARTIFACTS",
-      "namespace": "default",
+      "namespace": "todo-forkable",
       "remote": true
     }
   ],
