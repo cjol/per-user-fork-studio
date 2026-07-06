@@ -17,5 +17,3 @@ npm run dev -w example-todo-forkable      # or: npm run deploy -w example-todo-f
 
 The Artifacts binding runs remotely (`"remote": true`), so dev needs a logged
 in wrangler with access to an account that has Artifacts enabled.
-
-<!-- ci: teardown test A (merge) -->
