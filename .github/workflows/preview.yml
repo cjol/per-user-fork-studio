@@ -53,6 +53,23 @@ jobs:
       - run: npm ci
       - run: npm run build -w vite-plugin-forkable-worker
       - run: npm run build -w ${{ matrix.workspace }}
+      - name: Namespace preview Artifacts
+        working-directory: ${{ matrix.dir }}
+        env:
+          CONFIG: ${{ matrix.config }}
+          ARTIFACTS_NAMESPACE: ${{ matrix.base }}-pr-${{ github.event.pull_request.number }}
+        run: |
+          node --input-type=module <<'NODE'
+          import { readFileSync, writeFileSync } from "node:fs";
+
+          const file = process.env.CONFIG;
+          const namespace = process.env.ARTIFACTS_NAMESPACE;
+          const config = JSON.parse(readFileSync(file, "utf8"));
+          config.artifacts = (config.artifacts ?? []).map((binding) =>
+            binding.binding === "ARTIFACTS" ? { ...binding, namespace } : binding
+          );
+          writeFileSync(file, JSON.stringify(config, null, 2) + "\n");
+          NODE
       - name: Deploy preview Worker
         id: deploy
         working-directory: ${{ matrix.dir }}

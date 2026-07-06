@@ -48,3 +48,33 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           WORKER_NAME: ${{ matrix.base }}-pr-${{ github.event.pull_request.number }}
         run: npx wrangler delete "$WORKER_NAME" --force || echo "No preview Worker '$WORKER_NAME' to delete."
+      - name: Delete preview Artifacts repos
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          ARTIFACTS_NAMESPACE: ${{ matrix.base }}-pr-${{ github.event.pull_request.number }}
+        run: |
+          repos_json=$(npx wrangler artifacts repos list --namespace "$ARTIFACTS_NAMESPACE" --json 2>/dev/null || true)
+          repo_names=$(REPOS_JSON="$repos_json" node --input-type=module <<'NODE'
+          const raw = process.env.REPOS_JSON || "[]";
+          let parsed;
+          try {
+            parsed = JSON.parse(raw);
+          } catch {
+            parsed = [];
+          }
+          const repos = Array.isArray(parsed)
+            ? parsed
+            : (parsed.repos ?? parsed.repositories ?? parsed.result ?? []);
+          for (const repo of repos) {
+            if (repo?.name) console.log(repo.name);
+          }
+          NODE
+          )
+          if [ -z "$repo_names" ]; then
+            echo "No preview Artifacts repos found in '$ARTIFACTS_NAMESPACE'."
+            exit 0
+          fi
+          while IFS= read -r repo; do
+            npx wrangler artifacts repos delete "$repo" --namespace "$ARTIFACTS_NAMESPACE" --force || echo "Could not delete Artifacts repo '$repo'."
+          done <<< "$repo_names"

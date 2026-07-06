@@ -282,9 +282,10 @@ function invalidateVirtualModule(server: ViteDevServer): void {
 // ── wrangler config validation (best-effort, warnings only) ──────────────
 
 interface WranglerShape {
+  name?: string;
   main?: string;
   compatibility_flags?: string[];
-  artifacts?: Array<{ binding?: string }>;
+  artifacts?: Array<{ binding?: string; namespace?: string }>;
   ai?: { binding?: string };
   durable_objects?: { bindings?: Array<{ name?: string; class_name?: string }> };
   migrations?: Array<{ new_sqlite_classes?: string[] }>;
@@ -338,6 +339,14 @@ function validateWranglerConfig(
   }
   if (!config.artifacts?.some((a) => a.binding === names.artifacts)) {
     problems.push(`an artifacts binding named "${names.artifacts}"`);
+  } else if (
+    config.artifacts.some(
+      (a) => a.binding === names.artifacts && (!a.namespace || a.namespace === "default")
+    )
+  ) {
+    problems.push(
+      `a unique artifacts namespace for "${names.artifacts}" (for example "${config.name ?? "my-app"}")`
+    );
   }
   if (config.ai?.binding !== names.ai) {
     problems.push(`an AI binding named "${names.ai}"`);
@@ -367,7 +376,13 @@ function validateWranglerConfig(
           {
             main: generatedEntry,
             compatibility_flags: ["nodejs_compat"],
-            artifacts: [{ binding: names.artifacts, namespace: "default", remote: true }],
+            artifacts: [
+              {
+                binding: names.artifacts,
+                namespace: config.name ?? "my-app",
+                remote: true
+              }
+            ],
             ai: { binding: names.ai },
             durable_objects: {
               bindings: [{ name: names.userApp, class_name: "UserApp" }]
