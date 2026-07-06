@@ -1,0 +1,44 @@
+# Deploys every example forkable worker on pushes to main.
+#
+# Required repository secrets:
+#   CLOUDFLARE_API_TOKEN   — API token with Workers Scripts:Edit (and the
+#                            account's Artifacts/AI/Worker Loader access)
+#   CLOUDFLARE_ACCOUNT_ID  — target account id
+#
+# A deploy that ships changed app/ files is the "upstream update": the base
+# repo gets a new commit on first visit and every fork sees "Pull base updates".
+name: Deploy examples
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "packages/**"
+      - "examples/**"
+      - ".github/workflows/deploy-examples.yml"
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - workspace: example-todo-forkable
+            dir: examples/todo
+          - workspace: example-react-notes-forkable
+            dir: examples/react-notes
+    name: deploy ${{ matrix.dir }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run build -w vite-plugin-forkable-worker
+      - run: npm run deploy -w ${{ matrix.workspace }}
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}

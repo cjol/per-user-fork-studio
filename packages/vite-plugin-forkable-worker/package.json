@@ -1,0 +1,44 @@
+{
+  "name": "vite-plugin-forkable-worker",
+  "version": "0.1.0",
+  "description": "Turn a Cloudflare Worker app into a forkable worker: every user gets a personal AI-customizable fork that can still pull the developer's updates.",
+  "type": "module",
+  "license": "MIT",
+  "files": [
+    "dist",
+    "client.d.ts"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/plugin/index.d.ts",
+      "import": "./dist/plugin/index.js"
+    },
+    "./runtime": {
+      "types": "./dist/runtime/index.d.ts",
+      "import": "./dist/runtime/index.js"
+    },
+    "./client": {
+      "types": "./client.d.ts"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "check": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@cloudflare/shell": "^0.4.1",
+    "@cloudflare/think": "^0.10.0",
+    "@cloudflare/worker-bundler": "^0.2.1",
+    "agents": "^0.17.0",
+    "workers-ai-provider": "^3.2.0"
+  },
+  "peerDependencies": {
+    "vite": ">=6"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20260702.1",
+    "@types/node": "^24.0.10",
+    "typescript": "^5.9.2",
+    "vite": "^8.1.3"
+  }
+}

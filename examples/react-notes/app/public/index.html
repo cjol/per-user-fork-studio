@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Notes</title>
+    <style>
+      * { box-sizing: border-box; }
+      html, body { margin: 0; }
+      body { font-family: system-ui, sans-serif; background: #0b0b0f; color: #eaeaea; }
+      .wrap { max-width: 640px; margin: 0 auto; padding: 24px; }
+      .hdr h1 { margin: 0; font-size: 28px; color: #7dd3fc; }
+      .hdr p { color: #9a9aa6; margin: 6px 0 20px; }
+      .row { display: flex; gap: 8px; margin-bottom: 16px; }
+      .row input { flex: 1; min-width: 0; padding: 12px; border-radius: 8px; border: 1px solid #33333d; background: #16161d; color: #eee; font-size: 16px; }
+      .row button { padding: 12px 18px; border-radius: 8px; border: 0; background: #7dd3fc; color: #0b0b0f; font-weight: 600; cursor: pointer; }
+      ul { list-style: none; padding: 0; margin: 0; }
+      li { background: #16161d; border: 1px solid #26262e; border-radius: 10px; padding: 12px 14px; margin: 8px 0; display: flex; align-items: center; gap: 10px; }
+      li span { flex: 1; word-break: break-word; }
+      li.done span { color: #9a9aa6; text-decoration: line-through; }
+      li .del { background: transparent; color: #888; border: 0; font-size: 22px; cursor: pointer; }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/client.js"></script>
+  </body>
+</html>
