@@ -4,10 +4,16 @@
 # <base>-pr-<number> Worker. Deleting the Worker also removes its Durable
 # Object storage. Deletion is tolerant of a Worker that was never created
 # (for example, a PR that only touched docs).
+#
+# Uses pull_request_target (not pull_request) so teardown runs from the base
+# branch context and does not depend on the PR head ref still existing. This
+# is what makes cleanup survive the branch being deleted at close/merge time.
+# It does not check out or run PR head code (checkout defaults to the base
+# ref), so the usual pull_request_target code-execution risk does not apply.
 name: PR preview cleanup
 
 on:
-  pull_request:
+  pull_request_target:
     types: [closed]
 
 concurrency:
